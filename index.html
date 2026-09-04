@@ -1,0 +1,594 @@
+
+<title>Production Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --gold:#B8975A; --gold-light:#D4B483; --gold-dark:#8C6F3E;
+    --ink:#1A1A1A; --ink-muted:#5A5A5A; --ink-faint:#9A9A9A;
+    --surface:#FAFAF8; --surface-alt:#F3F1EC;
+    --border:rgba(184,151,90,0.2); --border-strong:rgba(184,151,90,0.45);
+    --success:#2E6B4F; --error:#8B2E2E;
+    --in-bg:#EDF5F0; --in-border:#2E6B4F; --in-text:#2E6B4F;
+    --out-bg:#F5EDEE; --out-border:#8B2E2E; --out-text:#8B2E2E;
+    --bg:var(--surface); --card:#fff;
+  }
+  @media(prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ink:#F0EDE6; --ink-muted:#A89880; --ink-faint:#6A5F50;
+      --surface:#1A1714; --surface-alt:#231F1A;
+      --border:rgba(184,151,90,0.18); --border-strong:rgba(184,151,90,0.38);
+      --bg:#1A1714; --card:#211D19;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#F0EDE6; --ink-muted:#A89880; --ink-faint:#6A5F50;
+    --surface:#1A1714; --surface-alt:#231F1A;
+    --border:rgba(184,151,90,0.18); --border-strong:rgba(184,151,90,0.38);
+    --bg:#1A1714; --card:#211D19;
+  }
+  body{
+    font-family:'DM Sans',-apple-system,Segoe UI,Roboto,sans-serif;
+    background:var(--bg); color:var(--ink); min-height:100vh;
+    padding:20px; padding-bottom:110px;
+  }
+  body::before{
+    content:''; position:fixed; inset:0;
+    background-image:linear-gradient(rgba(184,151,90,0.04) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(184,151,90,0.04) 1px, transparent 1px);
+    background-size:40px 40px; pointer-events:none; z-index:0;
+  }
+  .page{position:relative; z-index:1; max-width:480px; margin:0 auto;}
+
+  .brand{display:flex; align-items:center; gap:12px; margin-bottom:18px;}
+  .monogram{
+    width:42px; height:42px; border-radius:50%;
+    background:linear-gradient(135deg, var(--gold-light), var(--gold-dark));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'DM Serif Display',serif; color:#fff; font-size:17px; flex-shrink:0;
+    box-shadow:0 2px 6px rgba(140,111,62,0.3);
+  }
+  .brand h1{font-family:'DM Serif Display',serif; font-size:18px; font-weight:400; color:var(--ink);}
+  .brand p{font-size:11px; color:var(--ink-faint); margin-top:1px;}
+
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:20px;
+    padding:22px; margin-bottom:16px; position:relative;
+    box-shadow:0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.05);
+  }
+  .card::before{
+    content:''; position:absolute; top:0; left:24px; right:24px; height:3px;
+    background:linear-gradient(90deg, transparent, var(--gold), transparent);
+    border-radius:0 0 3px 3px;
+  }
+
+  .section-label{
+    font-size:11px; color:var(--ink-muted); text-transform:uppercase;
+    letter-spacing:0.08em; font-weight:600; margin-bottom:10px;
+  }
+
+  /* ── QR scan button ── */
+  .qr-scan-btn{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:100%; padding:16px; border-radius:14px; margin-bottom:14px;
+    background:var(--surface-alt); border:2px dashed var(--border-strong);
+    color:var(--ink-muted); font-size:15px; font-weight:600;
+    cursor:pointer; user-select:none; transition:background 0.15s, border-color 0.15s;
+  }
+  .qr-scan-btn:active{ background:var(--border); }
+  .qr-scan-btn.success{ border-color:var(--success); color:var(--success); }
+  .qr-icon{ font-size:24px; }
+
+  /* ── Inline camera viewport ── */
+  #qrViewport{
+    display:none; position:relative; width:100%;
+    aspect-ratio:1/1; border-radius:14px; overflow:hidden;
+    background:#000; margin-bottom:14px;
+    border:2px solid var(--border-strong);
+  }
+  #qrVideo{width:100%; height:100%; object-fit:cover; display:block;}
+  .qr-corners{position:absolute; inset:0; pointer-events:none;}
+  .qr-close-btn{
+    position:absolute; top:10px; right:10px;
+    background:rgba(0,0,0,0.55); backdrop-filter:blur(4px);
+    color:#fff; border:none; border-radius:20px;
+    padding:6px 14px; font-size:13px; font-weight:600;
+    cursor:pointer; font-family:'DM Sans',sans-serif;
+  }
+  .qr-status{
+    position:absolute; bottom:0; left:0; right:0;
+    background:linear-gradient(transparent, rgba(0,0,0,0.65));
+    color:rgba(255,255,255,0.85); text-align:center;
+    font-size:13px; padding:18px 12px 14px; font-weight:500;
+  }
+
+  /* ── Tag input ── */
+  .tag-input-wrap{
+    flex:1; background:var(--surface-alt); border:2px solid var(--border-strong);
+    border-radius:14px; padding:10px 14px; min-height:56px;
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    cursor:text; transition:border-color 0.15s;
+  }
+  .tag-input-wrap:focus-within{border-color:var(--gold);}
+  .order-tag{
+    display:flex; align-items:center; gap:5px;
+    background:var(--gold); color:#fff; border-radius:8px;
+    padding:5px 10px; font-size:15px; font-weight:600;
+    font-family:'DM Serif Display',serif;
+  }
+  .order-tag .remove{
+    cursor:pointer; font-size:16px; line-height:1; opacity:0.8;
+    font-family:'DM Sans',sans-serif; font-weight:400;
+  }
+  .order-tag .remove:hover{opacity:1;}
+  .tag-input{
+    border:none; background:transparent; outline:none;
+    font-size:20px; font-family:'DM Serif Display',serif;
+    color:var(--ink); width:120px; min-width:80px; letter-spacing:1px;
+  }
+  .tag-input::placeholder{color:var(--ink-faint); font-family:'DM Sans',sans-serif; font-size:14px; letter-spacing:0;}
+  .tag-hint{font-size:11px; color:var(--ink-faint); margin-top:6px;}
+
+  .chip-row{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{
+    flex:1 1 auto; text-align:center; padding:14px 10px; border-radius:12px;
+    border:1.5px solid var(--border); background:var(--surface-alt);
+    color:var(--ink); font-size:15px; font-weight:600; cursor:pointer;
+    user-select:none; transition:border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .chip.process{flex:0 1 30%; font-size:13px; padding:13px 6px;}
+  .chip.dir-in.selected{background:var(--in-bg); border-color:var(--in-border); color:var(--in-text);}
+  .chip.dir-out.selected{background:var(--out-bg); border-color:var(--out-border); color:var(--out-text);}
+  .chip.process.selected{background:var(--gold); border-color:var(--gold); color:#fff;}
+
+  .submit-btn{
+    width:100%; padding:17px; border-radius:14px; border:none;
+    background:linear-gradient(135deg, var(--gold-light), var(--gold-dark));
+    color:#fff; font-size:16px; font-weight:600; margin-top:6px;
+    box-shadow:0 4px 14px rgba(140,111,62,0.35); cursor:pointer;
+  }
+  .submit-btn:active{opacity:0.88;}
+
+  .status-bar{
+    position:fixed; bottom:0; left:0; right:0;
+    background:var(--card); border-top:1px solid var(--border);
+    padding:12px 18px; display:flex; justify-content:space-between; align-items:center;
+    font-size:12px; color:var(--ink-muted); z-index:10;
+  }
+  .status-bar .dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px;}
+  .status-bar .online{background:var(--success);}
+  .status-bar .offline{background:var(--ink-faint);}
+  .status-bar button{
+    background:var(--surface-alt); border:1px solid var(--border); color:var(--ink);
+    padding:7px 14px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer;
+  }
+
+  .setup-overlay{
+    position:fixed; inset:0; background:var(--bg);
+    display:flex; flex-direction:column; justify-content:center; padding:28px; z-index:99;
+  }
+  .setup-overlay h2{font-family:'DM Serif Display',serif; font-size:22px; color:var(--ink); margin-bottom:6px;}
+  .setup-overlay p{color:var(--ink-faint); font-size:13px; margin-bottom:22px;}
+  .setup-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .setup-grid .chip{padding:18px 8px; font-size:15px; background:var(--card);}
+
+  .toast{
+    position:fixed; top:18px; left:18px; right:18px;
+    padding:13px; border-radius:12px;
+    text-align:center; font-size:14px; font-weight:600;
+    opacity:0; transition:opacity 0.3s; pointer-events:none; z-index:50;
+    box-shadow:0 4px 16px rgba(0,0,0,0.15);
+  }
+  .toast.success{background:var(--success); color:#fff;}
+  .toast.fail{background:var(--error); color:#fff;}
+  .toast.show{opacity:1;}
+
+  .log-link{text-align:center; font-size:12px; color:var(--ink-faint); margin-top:8px; text-decoration:underline; cursor:pointer;}
+  .sub-line{font-size:12px; color:var(--ink-faint); margin-bottom:18px;}
+  .sub-line span{text-decoration:underline; cursor:pointer; color:var(--gold-dark); font-weight:600;}
+  .divider{border:none; border-top:1px dashed var(--border-strong); margin:18px 0;}
+</style>
+
+<div class="toast" id="toast"></div>
+
+<div class="setup-overlay" id="setupOverlay" style="display:none;">
+  <h2>Who are you?</h2>
+  <p>Pick your name — it stays saved on this device.</p>
+  <div class="setup-grid" id="setupGrid"></div>
+</div>
+
+<div class="page" id="mainApp">
+  <div class="brand">
+    <div class="monogram">BJ</div>
+    <div>
+      <h1>Production Tracker</h1>
+      <p>Brahammand Jewels — Casting to Collection</p>
+    </div>
+  </div>
+  <div class="sub-line">Logged in as: <b id="currentUser">—</b> · <span id="changeUser">change</span></div>
+
+  <div class="card">
+    <div class="section-label">Scan or Type Order Numbers</div>
+
+    <!-- QR scan button -->
+    <div class="qr-scan-btn" id="qrScanBtn">
+      <span class="qr-icon">📷</span>
+      <span id="qrBtnText">Tap to scan QR code</span>
+    </div>
+
+    <!-- Inline camera viewport -->
+    <div id="qrViewport">
+      <video id="qrVideo" autoplay playsinline muted></video>
+      <canvas id="qrCanvas" style="display:none;"></canvas>
+      <!-- Gold corner guides -->
+      <svg class="qr-corners" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path d="M10,22 L10,10 L22,10" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M78,10 L90,10 L90,22" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M10,78 L10,90 L22,90" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M90,78 L90,90 L78,90" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <button class="qr-close-btn" id="qrCloseBtn">✕ Close</button>
+      <div class="qr-status" id="qrStatus">Point at a QR code</div>
+    </div>
+
+    <!-- Tag input -->
+    <div class="tag-input-wrap" id="tagWrap">
+      <input class="tag-input" type="number" id="orderInput"
+             placeholder="or type here…" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+    </div>
+    <div class="tag-hint">Scan a QR OR type a number → <b>Enter / Space</b> to add.</div>
+  </div>
+
+  <div class="card">
+    <div class="section-label">Movement</div>
+    <div class="chip-row" style="margin-bottom:0;">
+      <div class="chip dir-in" data-val="IN">✅ IN</div>
+      <div class="chip dir-out" data-val="OUT">🔴 OUT</div>
+    </div>
+    <hr class="divider">
+    <div class="section-label">Process Stage</div>
+    <div class="chip-row">
+      <div class="chip process" data-val="Filling">Filling</div>
+      <div class="chip process" data-val="Setting">Setting</div>
+      <div class="chip process" data-val="Polish">Polish</div>
+      <div class="chip process" data-val="Packaging">Packaging</div>
+      <div class="chip process" data-val="Done">Done</div>
+    </div>
+  </div>
+
+  <button class="submit-btn" id="submitBtn">Submit Entry</button>
+  <div class="log-link" id="viewLogLink">View today's entries on this device (<span id="logCount">0</span>)</div>
+</div>
+
+<div class="status-bar">
+  <div><span class="dot offline" id="netDot"></span><span id="netText">Offline</span> · <span id="queueText">0 pending</span></div>
+  <button id="syncBtn">Sync now</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script>
+(function() {
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzq3Sl8Gm8fDDN_9E_hF_PWReruslhlZAvspuqMVTRqlmRQ1-PuPsZyWh1Kxm-DXUy1cQ/exec';
+
+  var TEAM = [
+    { code: 'P',  name: 'Pranav' },
+    { code: 'K',  name: 'Ketan' },
+    { code: 'RK', name: 'Rakesh' },
+    { code: 'HS', name: 'Harsh' },
+    { code: 'RO', name: 'Rohit' },
+    { code: 'SK', name: 'Sanket' },
+    { code: 'RS', name: 'Roshni' },
+    { code: 'AM', name: 'Amit' },
+    { code: 'RJ', name: 'Raj' }
+  ];
+
+  var QUEUE_KEY   = 'pms_entry_queue_v1';
+  var USER_KEY    = 'pms_device_user_v1';
+  var COUNTER_KEY = 'pms_entry_counter_v1';
+  var DEVICE_KEY  = 'pms_device_id_v1';
+
+  var selectedDir = null;
+  var selectedProcesses = new Set();
+  var orderNumbers = [];
+
+  // ── Device ID ──
+  var deviceId = localStorage.getItem(DEVICE_KEY);
+  if (!deviceId) {
+    deviceId = Math.random().toString(36).slice(2,10) + Math.random().toString(36).slice(2,10);
+    localStorage.setItem(DEVICE_KEY, deviceId);
+  }
+
+  // ── User setup ──
+  function getUser() {
+    var raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }
+  function setUser(u) {
+    localStorage.setItem(USER_KEY, JSON.stringify(u));
+    document.getElementById('currentUser').textContent = u.name;
+  }
+  function renderSetup() {
+    var grid = document.getElementById('setupGrid');
+    grid.innerHTML = '';
+    TEAM.forEach(function(u) {
+      var el = document.createElement('div');
+      el.className = 'chip';
+      el.textContent = u.name;
+      el.onclick = function() {
+        setUser(u);
+        document.getElementById('setupOverlay').style.display = 'none';
+      };
+      grid.appendChild(el);
+    });
+  }
+  document.getElementById('changeUser').onclick = function() {
+    document.getElementById('setupOverlay').style.display = 'flex';
+  };
+  var existingUser = getUser();
+  if (existingUser) {
+    document.getElementById('currentUser').textContent = existingUser.name;
+  } else {
+    document.getElementById('setupOverlay').style.display = 'flex';
+  }
+  renderSetup();
+
+  // ── Entry ID ──
+  function getNextCounter() {
+    var n = parseInt(localStorage.getItem(COUNTER_KEY) || '0', 10) + 1;
+    localStorage.setItem(COUNTER_KEY, String(n));
+    return n;
+  }
+  function makeEntryId(userCode) {
+    return deviceId + '-' + userCode + '-' + getNextCounter();
+  }
+
+  // ── QR scanning — inline camera stream ──
+  var qrCanvas   = document.getElementById('qrCanvas');
+  var qrCtx      = qrCanvas.getContext('2d');
+  var qrBtnText  = document.getElementById('qrBtnText');
+  var qrScanBtn  = document.getElementById('qrScanBtn');
+  var qrVideo    = document.getElementById('qrVideo');
+  var qrViewport = document.getElementById('qrViewport');
+  var qrStatus   = document.getElementById('qrStatus');
+  var qrStream   = null;
+  var qrRaf      = null;
+  var qrActive   = false;
+
+  function stopCamera() {
+    qrActive = false;
+    if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = null; }
+    if (qrStream) { qrStream.getTracks().forEach(function(t){ t.stop(); }); qrStream = null; }
+    qrVideo.srcObject = null;
+    qrViewport.style.display = 'none';
+    qrScanBtn.style.display  = 'flex';
+  }
+  document.getElementById('qrCloseBtn').addEventListener('click', stopCamera);
+
+  function scanFrame() {
+    if (!qrActive) return;
+    if (qrVideo.readyState === qrVideo.HAVE_ENOUGH_DATA) {
+      qrCanvas.width  = qrVideo.videoWidth;
+      qrCanvas.height = qrVideo.videoHeight;
+      qrCtx.drawImage(qrVideo, 0, 0);
+      if (window.jsQR) {
+        var imgData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+        var code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
+        if (code) {
+          var num = code.data.replace(/\D/g, '');
+          if (num) {
+            addOrderNumber(num);
+            if (navigator.vibrate) navigator.vibrate(60);
+            stopCamera();
+            qrScanBtn.classList.add('success');
+            qrBtnText.textContent = '✓ ' + num + ' added — tap to scan another';
+            setTimeout(function(){
+              qrScanBtn.classList.remove('success');
+              qrBtnText.textContent = 'Tap to scan QR code';
+            }, 2500);
+            return;
+          } else {
+            qrStatus.textContent = 'QR found — no number in it';
+          }
+        } else {
+          qrStatus.textContent = 'Point at a QR code';
+        }
+      }
+    }
+    qrRaf = requestAnimationFrame(scanFrame);
+  }
+
+  qrScanBtn.addEventListener('click', function() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('Camera not supported on this browser', 'fail'); return;
+    }
+    qrScanBtn.style.display  = 'none';
+    qrViewport.style.display = 'block';
+    qrStatus.textContent = 'Starting camera…';
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .catch(function() {
+        return navigator.mediaDevices.getUserMedia({ video: true });
+      })
+      .then(function(stream) {
+        qrStream = stream;
+        qrVideo.srcObject = stream;
+        qrVideo.play();
+        qrActive = true;
+        qrStatus.textContent = 'Point at a QR code';
+        qrRaf = requestAnimationFrame(scanFrame);
+      })
+      .catch(function(err) {
+        stopCamera();
+        showToast('Camera error: ' + (err.name || err.message), 'fail');
+      });
+  });
+
+  // ── Tag input ──
+  var tagWrap    = document.getElementById('tagWrap');
+  var orderInput = document.getElementById('orderInput');
+
+  function addOrderNumber(val) {
+    val = String(val).trim();
+    if (!val || isNaN(val)) return;
+    if (orderNumbers.indexOf(val) !== -1) return;
+    orderNumbers.push(val);
+    renderTags();
+    orderInput.value = '';
+  }
+  function removeOrderNumber(val) {
+    orderNumbers = orderNumbers.filter(function(n){ return n !== val; });
+    renderTags();
+    orderInput.focus();
+  }
+  function renderTags() {
+    tagWrap.querySelectorAll('.order-tag').forEach(function(el){ el.remove(); });
+    orderNumbers.forEach(function(num) {
+      var tag = document.createElement('div');
+      tag.className = 'order-tag';
+      tag.innerHTML = num + ' <span class="remove" data-num="' + num + '">×</span>';
+      tag.querySelector('.remove').addEventListener('click', function(){ removeOrderNumber(num); });
+      tagWrap.insertBefore(tag, orderInput);
+    });
+  }
+  orderInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addOrderNumber(orderInput.value); }
+    if (e.key === 'Backspace' && orderInput.value === '' && orderNumbers.length > 0)
+      removeOrderNumber(orderNumbers[orderNumbers.length - 1]);
+  });
+  orderInput.addEventListener('blur', function(){ if (orderInput.value.trim()) addOrderNumber(orderInput.value); });
+  tagWrap.addEventListener('click', function(){ orderInput.focus(); });
+
+  // ── Direction chips ──
+  document.querySelectorAll('.chip.dir-in, .chip.dir-out').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      document.querySelectorAll('.chip.dir-in, .chip.dir-out').forEach(function(c){ c.classList.remove('selected'); });
+      chip.classList.add('selected');
+      selectedDir = chip.getAttribute('data-val');
+    });
+  });
+
+  // ── Process chips ──
+  document.querySelectorAll('.chip.process').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      document.querySelectorAll('.chip.process').forEach(function(c){ c.classList.remove('selected'); });
+      chip.classList.add('selected');
+      selectedProcesses = new Set([chip.getAttribute('data-val')]);
+      if (chip.getAttribute('data-val') === 'Done') {
+        if (orderInput.value.trim()) addOrderNumber(orderInput.value);
+        if (orderNumbers.length === 0) { showToast('Enter at least one order number', 'fail'); return; }
+        selectedDir = 'IN';
+        document.getElementById('submitBtn').click();
+      }
+    });
+  });
+
+  // ── Queue helpers ──
+  function getQueue() {
+    try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e){ return []; }
+  }
+  function saveQueue(q) {
+    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch(e){}
+    refreshStatus();
+  }
+  function refreshStatus() {
+    var q = getQueue();
+    var pending = q.filter(function(item){ return !item.synced; }).length;
+    document.getElementById('queueText').textContent = pending + ' pending';
+    document.getElementById('logCount').textContent = q.length;
+  }
+
+  // ── Toast ──
+  function showToast(msg, type) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + (type || 'success');
+    t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2200);
+  }
+
+  // ── Submit ──
+  document.getElementById('submitBtn').addEventListener('click', function() {
+    var u = getUser();
+    if (!u) { document.getElementById('setupOverlay').style.display = 'flex'; return; }
+    if (orderInput.value.trim()) addOrderNumber(orderInput.value);
+    if (orderNumbers.length === 0) { showToast('Enter at least one order number', 'fail'); return; }
+    if (!selectedDir && !selectedProcesses.has('Done')) { showToast('Pick IN or OUT', 'fail'); return; }
+    if (selectedProcesses.size === 0) { showToast('Select a process', 'fail'); return; }
+
+    var q = getQueue();
+    orderNumbers.forEach(function(orderNo) {
+      q.push({
+        entryId:   makeEntryId(u.code),
+        scannedBy: u.name,
+        orderNo:   orderNo,
+        direction: selectedDir,
+        processes: Array.from(selectedProcesses),
+        timestamp: new Date().toString(),
+        synced:    false
+      });
+    });
+    saveQueue(q);
+
+    var processLabel = Array.from(selectedProcesses).join('/');
+    showToast(selectedDir + ' — ' + orderNumbers.length + ' order(s) → ' + processLabel, 'success');
+
+    orderNumbers = [];
+    renderTags();
+    document.querySelectorAll('.chip.selected').forEach(function(c){ c.classList.remove('selected'); });
+    selectedDir = null;
+    selectedProcesses = new Set();
+
+    trySync();
+  });
+
+  // ── Sync ──
+  function trySync() {
+    if (!navigator.onLine) { updateNetStatus(); return; }
+    var q = getQueue();
+    q.filter(function(item){ return !item.synced; }).forEach(function(item) {
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(item)
+      })
+      .then(function(res){ return res.json(); })
+      .then(function(json) {
+        if (json.status === 'ok') {
+          var current = getQueue();
+          var target  = current.find(function(x){ return x.entryId === item.entryId; });
+          if (target) { target.synced = true; }
+          saveQueue(current);
+        }
+      })
+      .catch(function(){});
+    });
+  }
+
+  document.getElementById('syncBtn').addEventListener('click', function(){ trySync(); showToast('Syncing…', 'success'); });
+  window.addEventListener('online',  function(){ updateNetStatus(); trySync(); });
+  window.addEventListener('offline', updateNetStatus);
+
+  function updateNetStatus() {
+    var dot  = document.getElementById('netDot');
+    var text = document.getElementById('netText');
+    if (navigator.onLine) { dot.className = 'dot online'; text.textContent = 'Online'; }
+    else                  { dot.className = 'dot offline'; text.textContent = 'Offline'; }
+  }
+
+  setInterval(trySync, 20000);
+  updateNetStatus();
+  refreshStatus();
+
+  // ── Log viewer ──
+  document.getElementById('viewLogLink').addEventListener('click', function() {
+    var q = getQueue();
+    if (q.length === 0) { alert('No entries on this device yet.'); return; }
+    var lines = q.map(function(item) {
+      return item.entryId + ' — ' + item.orderNo + ' — ' + item.direction +
+        ' — ' + item.processes.join('/') + ' — ' + (item.synced ? '✓ synced' : '⏳ pending');
+    });
+    alert(lines.join('\n'));
+  });
+
+})();
+</script>
