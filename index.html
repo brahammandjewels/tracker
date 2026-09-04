@@ -524,15 +524,14 @@
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(item)
       })
-      .then(function(res){ return res.json(); })
-      .then(function(json) {
-        if (json.status === 'ok') {
-          var current = getQueue();
-          var target  = current.find(function(x){ return x.entryId === item.entryId; });
-          if (target) { target.synced = true; }
-          saveQueue(current);
-        }
-      })
+.then(function(res) {
+  if (res.ok) {
+    var current = getQueue();
+    var target  = current.find(function(x){ return x.entryId === item.entryId; });
+    if (target) { target.synced = true; }
+    saveQueue(current);
+  }
+})
       .catch(function(){})
       .finally(function(){ sendNext(i + 1); });
     }
