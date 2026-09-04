@@ -368,9 +368,11 @@
         var raw = result.getText();
         var num = raw.replace(/\D/g, '');
                   if (num) {
-            addOrderNumber(num);
+                        addOrderNumber(num);
             if (navigator.vibrate) navigator.vibrate(60);
+            (function(){ var a=new AudioContext(); var o=a.createOscillator(); var g=a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value=1046; g.gain.setValueAtTime(0.3,a.currentTime); g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.15); o.start(); o.stop(a.currentTime+0.15); })();
             qrStatus.textContent = '✓ ' + num + ' added — scan next or close';
+                   
             setTimeout(function(){
               qrStatus.textContent = 'Point at a QR code';
             }, 1500);
