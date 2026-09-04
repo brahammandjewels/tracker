@@ -67,7 +67,6 @@
     letter-spacing:0.08em; font-weight:600; margin-bottom:10px;
   }
 
-  /* ── QR scan button ── */
   .qr-scan-btn{
     display:flex; align-items:center; justify-content:center; gap:10px;
     width:100%; padding:16px; border-radius:14px; margin-bottom:14px;
@@ -75,11 +74,10 @@
     color:var(--ink-muted); font-size:15px; font-weight:600;
     cursor:pointer; user-select:none; transition:background 0.15s, border-color 0.15s;
   }
-  .qr-scan-btn:active{ background:var(--border); }
-  .qr-scan-btn.success{ border-color:var(--success); color:var(--success); }
-  .qr-icon{ font-size:24px; }
+  .qr-scan-btn:active{background:var(--border);}
+  .qr-scan-btn.success{border-color:var(--success); color:var(--success);}
+  .qr-icon{font-size:24px;}
 
-  /* ── Inline camera viewport ── */
   #qrViewport{
     display:none; position:relative; width:100%;
     aspect-ratio:1/1; border-radius:14px; overflow:hidden;
@@ -102,7 +100,6 @@
     font-size:13px; padding:18px 12px 14px; font-weight:500;
   }
 
-  /* ── Tag input ── */
   .tag-input-wrap{
     flex:1; background:var(--surface-alt); border:2px solid var(--border-strong);
     border-radius:14px; padding:10px 14px; min-height:56px;
@@ -210,17 +207,13 @@
   <div class="card">
     <div class="section-label">Scan or Type Order Numbers</div>
 
-    <!-- QR scan button -->
     <div class="qr-scan-btn" id="qrScanBtn">
       <span class="qr-icon">📷</span>
       <span id="qrBtnText">Tap to scan QR code</span>
     </div>
 
-    <!-- Inline camera viewport -->
     <div id="qrViewport">
       <video id="qrVideo" autoplay playsinline muted></video>
-      <canvas id="qrCanvas" style="display:none;"></canvas>
-      <!-- Gold corner guides -->
       <svg class="qr-corners" viewBox="0 0 100 100" preserveAspectRatio="none">
         <path d="M10,22 L10,10 L22,10" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
         <path d="M78,10 L90,10 L90,22" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
@@ -228,10 +221,9 @@
         <path d="M90,78 L90,90 L78,90" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
       </svg>
       <button class="qr-close-btn" id="qrCloseBtn">✕ Close</button>
-      <div class="qr-status" id="qrStatus">Point at a QR code</div>
+      <div class="qr-status" id="qrStatus">Starting camera…</div>
     </div>
 
-    <!-- Tag input -->
     <div class="tag-input-wrap" id="tagWrap">
       <input class="tag-input" type="number" id="orderInput"
              placeholder="or type here…" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
@@ -265,7 +257,7 @@
   <button id="syncBtn">Sync now</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 <script>
 (function() {
   var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzq3Sl8Gm8fDDN_9E_hF_PWReruslhlZAvspuqMVTRqlmRQ1-PuPsZyWh1Kxm-DXUy1cQ/exec';
@@ -300,8 +292,7 @@
 
   // ── User setup ──
   function getUser() {
-    var raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch(e){ return null; }
   }
   function setUser(u) {
     localStorage.setItem(USER_KEY, JSON.stringify(u));
@@ -342,85 +333,65 @@
     return deviceId + '-' + userCode + '-' + getNextCounter();
   }
 
-  // ── QR scanning — inline camera stream ──
-  var qrCanvas   = document.getElementById('qrCanvas');
-  var qrCtx      = qrCanvas.getContext('2d');
+  // ── QR scanning — ZXing ──
   var qrBtnText  = document.getElementById('qrBtnText');
   var qrScanBtn  = document.getElementById('qrScanBtn');
   var qrVideo    = document.getElementById('qrVideo');
   var qrViewport = document.getElementById('qrViewport');
   var qrStatus   = document.getElementById('qrStatus');
   var qrStream   = null;
-  var qrRaf      = null;
-  var qrActive   = false;
+  var qrControls = null;
+  var codeReader = null;
 
   function stopCamera() {
-    qrActive = false;
-    if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = null; }
-    if (qrStream) { qrStream.getTracks().forEach(function(t){ t.stop(); }); qrStream = null; }
+    if (qrControls) { try { qrControls.stop(); } catch(e){} qrControls = null; }
+    if (qrStream)   { qrStream.getTracks().forEach(function(t){ t.stop(); }); qrStream = null; }
     qrVideo.srcObject = null;
     qrViewport.style.display = 'none';
     qrScanBtn.style.display  = 'flex';
   }
   document.getElementById('qrCloseBtn').addEventListener('click', stopCamera);
 
-  function scanFrame() {
-    if (!qrActive) return;
-    if (qrVideo.readyState === qrVideo.HAVE_ENOUGH_DATA) {
-      qrCanvas.width  = qrVideo.videoWidth;
-      qrCanvas.height = qrVideo.videoHeight;
-      qrCtx.drawImage(qrVideo, 0, 0);
-      if (window.jsQR) {
-        var imgData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
-        var code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
-        if (code) {
-          var num = code.data.replace(/\D/g, '');
-          if (num) {
-            addOrderNumber(num);
-            if (navigator.vibrate) navigator.vibrate(60);
-            stopCamera();
-            qrScanBtn.classList.add('success');
-            qrBtnText.textContent = '✓ ' + num + ' added — tap to scan another';
-            setTimeout(function(){
-              qrScanBtn.classList.remove('success');
-              qrBtnText.textContent = 'Tap to scan QR code';
-            }, 2500);
-            return;
-          } else {
-            qrStatus.textContent = 'QR found — no number in it';
-          }
-        } else {
-          qrStatus.textContent = 'Point at a QR code';
-        }
-      }
-    }
-    qrRaf = requestAnimationFrame(scanFrame);
-  }
-
   qrScanBtn.addEventListener('click', function() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showToast('Camera not supported on this browser', 'fail'); return;
-    }
+    if (!window.ZXing) { showToast('Scanner still loading — try again', 'fail'); return; }
     qrScanBtn.style.display  = 'none';
     qrViewport.style.display = 'block';
-    qrStatus.textContent = 'Starting camera…';
+    qrStatus.textContent     = 'Starting camera…';
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .catch(function() {
-        return navigator.mediaDevices.getUserMedia({ video: true });
-      })
-      .then(function(stream) {
-        qrStream = stream;
-        qrVideo.srcObject = stream;
-        qrVideo.play();
-        qrActive = true;
-        qrStatus.textContent = 'Point at a QR code';
-        qrRaf = requestAnimationFrame(scanFrame);
-      })
-      .catch(function(err) {
-        stopCamera();
-        showToast('Camera error: ' + (err.name || err.message), 'fail');
-      });
+    if (!codeReader) {
+      codeReader = new ZXing.BrowserQRCodeReader();
+    }
+
+    codeReader.decodeFromVideoDevice(undefined, qrVideo, function(result, err) {
+      if (result) {
+        var raw = result.getText();
+        var num = raw.replace(/\D/g, '');
+        if (num) {
+          addOrderNumber(num);
+          if (navigator.vibrate) navigator.vibrate(60);
+          stopCamera();
+          qrScanBtn.classList.add('success');
+          qrBtnText.textContent = '✓ ' + num + ' added — tap to scan another';
+          setTimeout(function(){
+            qrScanBtn.classList.remove('success');
+            qrBtnText.textContent = 'Tap to scan QR code';
+          }, 2500);
+        } else {
+          qrStatus.textContent = 'Read: "' + raw + '" — no number found';
+        }
+      } else if (err && !(err instanceof ZXing.NotFoundException)) {
+        qrStatus.textContent = 'Error: ' + err.message;
+      }
+    })
+    .then(function(controls) {
+      qrControls = controls;
+      if (qrVideo.srcObject) qrStream = qrVideo.srcObject;
+      qrStatus.textContent = 'Point at a QR code';
+    })
+    .catch(function(err) {
+      stopCamera();
+      showToast('Camera error: ' + (err.name || err.message), 'fail');
+    });
   });
 
   // ── Tag input ──
@@ -537,15 +508,13 @@
     document.querySelectorAll('.chip.selected').forEach(function(c){ c.classList.remove('selected'); });
     selectedDir = null;
     selectedProcesses = new Set();
-
     trySync();
   });
 
   // ── Sync ──
   function trySync() {
     if (!navigator.onLine) { updateNetStatus(); return; }
-    var q = getQueue();
-    q.filter(function(item){ return !item.synced; }).forEach(function(item) {
+    getQueue().filter(function(item){ return !item.synced; }).forEach(function(item) {
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -583,11 +552,10 @@
   document.getElementById('viewLogLink').addEventListener('click', function() {
     var q = getQueue();
     if (q.length === 0) { alert('No entries on this device yet.'); return; }
-    var lines = q.map(function(item) {
+    alert(q.map(function(item){
       return item.entryId + ' — ' + item.orderNo + ' — ' + item.direction +
         ' — ' + item.processes.join('/') + ' — ' + (item.synced ? '✓ synced' : '⏳ pending');
-    });
-    alert(lines.join('\n'));
+    }).join('\n'));
   });
 
 })();
