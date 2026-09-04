@@ -510,9 +510,15 @@
   });
 
   // ── Sync ──
+   var syncing = false;
   function trySync() {
-    if (!navigator.onLine) { updateNetStatus(); return; }
-    getQueue().filter(function(item){ return !item.synced; }).forEach(function(item) {
+    if (!navigator.onLine || syncing) { updateNetStatus(); return; }
+    var pending = getQueue().filter(function(item){ return !item.synced; });
+    if (pending.length === 0) return;
+    syncing = true;
+    function sendNext(i) {
+      if (i >= pending.length) { syncing = false; return; }
+      var item = pending[i];
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -527,8 +533,10 @@
           saveQueue(current);
         }
       })
-      .catch(function(){});
-    });
+      .catch(function(){})
+      .finally(function(){ sendNext(i + 1); });
+    }
+    sendNext(0);
   }
 
   document.getElementById('syncBtn').addEventListener('click', function(){ trySync(); showToast('Syncing…', 'success'); });
