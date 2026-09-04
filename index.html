@@ -265,7 +265,7 @@
   <button id="syncBtn">Sync now</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 <script>
 (function() {
   var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzq3Sl8Gm8fDDN_9E_hF_PWReruslhlZAvspuqMVTRqlmRQ1-PuPsZyWh1Kxm-DXUy1cQ/exec';
@@ -342,253 +342,63 @@
     return deviceId + '-' + userCode + '-' + getNextCounter();
   }
 
-  // ── QR scanning — inline camera stream ──
+  // ── QR scanning — ZXing ──
   var qrCanvas   = document.getElementById('qrCanvas');
-  var qrCtx      = qrCanvas.getContext('2d');
   var qrBtnText  = document.getElementById('qrBtnText');
   var qrScanBtn  = document.getElementById('qrScanBtn');
   var qrVideo    = document.getElementById('qrVideo');
   var qrViewport = document.getElementById('qrViewport');
   var qrStatus   = document.getElementById('qrStatus');
   var qrStream   = null;
-  var qrRaf      = null;
-  var qrActive   = false;
+  var qrControls = null;
+  var codeReader = null;
 
   function stopCamera() {
-    qrActive = false;
-    if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = null; }
-    if (qrStream) { qrStream.getTracks().forEach(function(t){ t.stop(); }); qrStream = null; }
+    if (qrControls) { try { qrControls.stop(); } catch(e){} qrControls = null; }
+    if (qrStream)   { qrStream.getTracks().forEach(function(t){ t.stop(); }); qrStream = null; }
     qrVideo.srcObject = null;
     qrViewport.style.display = 'none';
     qrScanBtn.style.display  = 'flex';
   }
   document.getElementById('qrCloseBtn').addEventListener('click', stopCamera);
 
-  function scanFrame() {
-    if (!qrActive) return;
-    if (qrVideo.readyState === qrVideo.HAVE_ENOUGH_DATA) {
-      qrCanvas.width  = qrVideo.videoWidth;
-      qrCanvas.height = qrVideo.videoHeight;
-      qrCtx.drawImage(qrVideo, 0, 0);
-      if (window.jsQR) {
-        var imgData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
-        var code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
-        if (code) {
-          var num = code.data.replace(/\D/g, '');
-          if (num) {
-            addOrderNumber(num);
-            if (navigator.vibrate) navigator.vibrate(60);
-            stopCamera();
-            qrScanBtn.classList.add('success');
-            qrBtnText.textContent = '✓ ' + num + ' added — tap to scan another';
-            setTimeout(function(){
-              qrScanBtn.classList.remove('success');
-              qrBtnText.textContent = 'Tap to scan QR code';
-            }, 2500);
-            return;
-          } else {
-            qrStatus.textContent = 'QR found — no number in it';
-          }
-        } else {
-          qrStatus.textContent = 'Point at a QR code';
-        }
-      }
-    }
-    qrRaf = requestAnimationFrame(scanFrame);
-  }
-
   qrScanBtn.addEventListener('click', function() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showToast('Camera not supported on this browser', 'fail'); return;
-    }
+    if (!window.ZXing) { showToast('Scanner not loaded yet — try again', 'fail'); return; }
     qrScanBtn.style.display  = 'none';
     qrViewport.style.display = 'block';
-    qrStatus.textContent = 'Starting camera…';
+    qrStatus.textContent     = 'Starting camera…';
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .catch(function() {
-        return navigator.mediaDevices.getUserMedia({ video: true });
-      })
-      .then(function(stream) {
-        qrStream = stream;
-        qrVideo.srcObject = stream;
-        qrVideo.play();
-        qrActive = true;
-        qrStatus.textContent = 'Point at a QR code';
-        qrRaf = requestAnimationFrame(scanFrame);
-      })
-      .catch(function(err) {
-        stopCamera();
-        showToast('Camera error: ' + (err.name || err.message), 'fail');
-      });
-  });
+    if (!codeReader) { codeReader = new ZXing.BrowserQRCodeReader(); }
 
-  // ── Tag input ──
-  var tagWrap    = document.getElementById('tagWrap');
-  var orderInput = document.getElementById('orderInput');
-
-  function addOrderNumber(val) {
-    val = String(val).trim();
-    if (!val || isNaN(val)) return;
-    if (orderNumbers.indexOf(val) !== -1) return;
-    orderNumbers.push(val);
-    renderTags();
-    orderInput.value = '';
-  }
-  function removeOrderNumber(val) {
-    orderNumbers = orderNumbers.filter(function(n){ return n !== val; });
-    renderTags();
-    orderInput.focus();
-  }
-  function renderTags() {
-    tagWrap.querySelectorAll('.order-tag').forEach(function(el){ el.remove(); });
-    orderNumbers.forEach(function(num) {
-      var tag = document.createElement('div');
-      tag.className = 'order-tag';
-      tag.innerHTML = num + ' <span class="remove" data-num="' + num + '">×</span>';
-      tag.querySelector('.remove').addEventListener('click', function(){ removeOrderNumber(num); });
-      tagWrap.insertBefore(tag, orderInput);
-    });
-  }
-  orderInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addOrderNumber(orderInput.value); }
-    if (e.key === 'Backspace' && orderInput.value === '' && orderNumbers.length > 0)
-      removeOrderNumber(orderNumbers[orderNumbers.length - 1]);
-  });
-  orderInput.addEventListener('blur', function(){ if (orderInput.value.trim()) addOrderNumber(orderInput.value); });
-  tagWrap.addEventListener('click', function(){ orderInput.focus(); });
-
-  // ── Direction chips ──
-  document.querySelectorAll('.chip.dir-in, .chip.dir-out').forEach(function(chip) {
-    chip.addEventListener('click', function() {
-      document.querySelectorAll('.chip.dir-in, .chip.dir-out').forEach(function(c){ c.classList.remove('selected'); });
-      chip.classList.add('selected');
-      selectedDir = chip.getAttribute('data-val');
-    });
-  });
-
-  // ── Process chips ──
-  document.querySelectorAll('.chip.process').forEach(function(chip) {
-    chip.addEventListener('click', function() {
-      document.querySelectorAll('.chip.process').forEach(function(c){ c.classList.remove('selected'); });
-      chip.classList.add('selected');
-      selectedProcesses = new Set([chip.getAttribute('data-val')]);
-      if (chip.getAttribute('data-val') === 'Done') {
-        if (orderInput.value.trim()) addOrderNumber(orderInput.value);
-        if (orderNumbers.length === 0) { showToast('Enter at least one order number', 'fail'); return; }
-        selectedDir = 'IN';
-        document.getElementById('submitBtn').click();
-      }
-    });
-  });
-
-  // ── Queue helpers ──
-  function getQueue() {
-    try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e){ return []; }
-  }
-  function saveQueue(q) {
-    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch(e){}
-    refreshStatus();
-  }
-  function refreshStatus() {
-    var q = getQueue();
-    var pending = q.filter(function(item){ return !item.synced; }).length;
-    document.getElementById('queueText').textContent = pending + ' pending';
-    document.getElementById('logCount').textContent = q.length;
-  }
-
-  // ── Toast ──
-  function showToast(msg, type) {
-    var t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = 'toast ' + (type || 'success');
-    t.classList.add('show');
-    setTimeout(function(){ t.classList.remove('show'); }, 2200);
-  }
-
-  // ── Submit ──
-  document.getElementById('submitBtn').addEventListener('click', function() {
-    var u = getUser();
-    if (!u) { document.getElementById('setupOverlay').style.display = 'flex'; return; }
-    if (orderInput.value.trim()) addOrderNumber(orderInput.value);
-    if (orderNumbers.length === 0) { showToast('Enter at least one order number', 'fail'); return; }
-    if (!selectedDir && !selectedProcesses.has('Done')) { showToast('Pick IN or OUT', 'fail'); return; }
-    if (selectedProcesses.size === 0) { showToast('Select a process', 'fail'); return; }
-
-    var q = getQueue();
-    orderNumbers.forEach(function(orderNo) {
-      q.push({
-        entryId:   makeEntryId(u.code),
-        scannedBy: u.name,
-        orderNo:   orderNo,
-        direction: selectedDir,
-        processes: Array.from(selectedProcesses),
-        timestamp: new Date().toString(),
-        synced:    false
-      });
-    });
-    saveQueue(q);
-
-    var processLabel = Array.from(selectedProcesses).join('/');
-    showToast(selectedDir + ' — ' + orderNumbers.length + ' order(s) → ' + processLabel, 'success');
-
-    orderNumbers = [];
-    renderTags();
-    document.querySelectorAll('.chip.selected').forEach(function(c){ c.classList.remove('selected'); });
-    selectedDir = null;
-    selectedProcesses = new Set();
-
-    trySync();
-  });
-
-  // ── Sync ──
-  function trySync() {
-    if (!navigator.onLine) { updateNetStatus(); return; }
-    var q = getQueue();
-    q.filter(function(item){ return !item.synced; }).forEach(function(item) {
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(item)
-      })
-      .then(function(res){ return res.json(); })
-      .then(function(json) {
-        if (json.status === 'ok') {
-          var current = getQueue();
-          var target  = current.find(function(x){ return x.entryId === item.entryId; });
-          if (target) { target.synced = true; }
-          saveQueue(current);
+    codeReader.decodeFromVideoDevice(undefined, qrVideo, function(result, err) {
+      if (result) {
+        var raw = result.getText();
+        var num = raw.replace(/\D/g, '');
+        if (num) {
+          addOrderNumber(num);
+          if (navigator.vibrate) navigator.vibrate(60);
+          stopCamera();
+          qrScanBtn.classList.add('success');
+          qrBtnText.textContent = '✓ ' + num + ' added — tap to scan another';
+          setTimeout(function(){
+            qrScanBtn.classList.remove('success');
+            qrBtnText.textContent = 'Tap to scan QR code';
+          }, 2500);
+        } else {
+          qrStatus.textContent = 'Read: "' + raw + '" — no number found';
         }
-      })
-      .catch(function(){});
+      } else if (err && !(err instanceof ZXing.NotFoundException)) {
+        qrStatus.textContent = 'Scan error: ' + err.message;
+      }
+    })
+    .then(function(controls) {
+      qrControls = controls;
+      qrStatus.textContent = 'Point at a QR code';
+      // grab the stream so stopCamera can kill tracks
+      if (qrVideo.srcObject) qrStream = qrVideo.srcObject;
+    })
+    .catch(function(err) {
+      stopCamera();
+      showToast('Camera error: ' + (err.name || err.message), 'fail');
     });
-  }
-
-  document.getElementById('syncBtn').addEventListener('click', function(){ trySync(); showToast('Syncing…', 'success'); });
-  window.addEventListener('online',  function(){ updateNetStatus(); trySync(); });
-  window.addEventListener('offline', updateNetStatus);
-
-  function updateNetStatus() {
-    var dot  = document.getElementById('netDot');
-    var text = document.getElementById('netText');
-    if (navigator.onLine) { dot.className = 'dot online'; text.textContent = 'Online'; }
-    else                  { dot.className = 'dot offline'; text.textContent = 'Offline'; }
-  }
-
-  setInterval(trySync, 20000);
-  updateNetStatus();
-  refreshStatus();
-
-  // ── Log viewer ──
-  document.getElementById('viewLogLink').addEventListener('click', function() {
-    var q = getQueue();
-    if (q.length === 0) { alert('No entries on this device yet.'); return; }
-    var lines = q.map(function(item) {
-      return item.entryId + ' — ' + item.orderNo + ' — ' + item.direction +
-        ' — ' + item.processes.join('/') + ' — ' + (item.synced ? '✓ synced' : '⏳ pending');
-    });
-    alert(lines.join('\n'));
   });
-
-})();
-</script>
