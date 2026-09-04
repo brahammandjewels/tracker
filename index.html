@@ -516,26 +516,23 @@
     var pending = getQueue().filter(function(item){ return !item.synced; });
     if (pending.length === 0) return;
     syncing = true;
-    function sendNext(i) {
-      if (i >= pending.length) { syncing = false; return; }
-      var item = pending[i];
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(item)
-      })
-.then(function(res) {
-  if (res.ok) {
-    var current = getQueue();
-    var target  = current.find(function(x){ return x.entryId === item.entryId; });
-    if (target) { target.synced = true; }
-    saveQueue(current);
-  }
-})
-      .catch(function(){})
-      .finally(function(){ sendNext(i + 1); });
-    }
-    sendNext(0);
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(pending)
+    })
+    .then(function(res) {
+      if (res.ok) {
+        var current = getQueue();
+        pending.forEach(function(item) {
+          var target = current.find(function(x){ return x.entryId === item.entryId; });
+          if (target) target.synced = true;
+        });
+        saveQueue(current);
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ syncing = false; });
   }
 
   document.getElementById('syncBtn').addEventListener('click', function(){ trySync(); showToast('Syncing…', 'success'); });
