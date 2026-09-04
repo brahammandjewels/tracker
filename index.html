@@ -220,8 +220,8 @@
         <path d="M10,78 L10,90 L22,90" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
         <path d="M90,78 L90,90 L78,90" stroke="#B8975A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
       </svg>
-      <button class="qr-close-btn" id="qrCloseBtn">✕ Close</button>
-      <div class="qr-status" id="qrStatus">Starting camera…</div>
+      <button class="qr-close-btn" id="qrCloseBtn">✓ Done scanning</button>
+     <div class="qr-status" id="qrStatus">Starting camera…</div>
     </div>
 
     <div class="tag-input-wrap" id="tagWrap">
@@ -366,16 +366,13 @@
       if (result) {
         var raw = result.getText();
         var num = raw.replace(/\D/g, '');
-        if (num) {
-          addOrderNumber(num);
-          if (navigator.vibrate) navigator.vibrate(60);
-          stopCamera();
-          qrScanBtn.classList.add('success');
-          qrBtnText.textContent = '✓ ' + num + ' added — tap to scan another';
-          setTimeout(function(){
-            qrScanBtn.classList.remove('success');
-            qrBtnText.textContent = 'Tap to scan QR code';
-          }, 2500);
+                  if (num) {
+            addOrderNumber(num);
+            if (navigator.vibrate) navigator.vibrate(60);
+            qrStatus.textContent = '✓ ' + num + ' added — scan next or close';
+            setTimeout(function(){
+              qrStatus.textContent = 'Point at a QR code';
+            }, 1500);
         } else {
           qrStatus.textContent = 'Read: "' + raw + '" — no number found';
         }
