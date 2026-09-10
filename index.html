@@ -1,8 +1,14 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Production Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  /* ── Light theme (default) ── */
   :root{
     --gold:#B8975A; --gold-light:#D4B483; --gold-dark:#8C6F3E;
     --ink:#1A1A1A; --ink-muted:#5A5A5A; --ink-faint:#9A9A9A;
@@ -13,24 +19,23 @@
     --out-bg:#F5EDEE; --out-border:#8B2E2E; --out-text:#8B2E2E;
     --bg:var(--surface); --card:#fff;
   }
-  @media(prefers-color-scheme:light){
-    :root:not([data-theme="light"]){
-      --ink:#F0EDE6; --ink-muted:#A89880; --ink-faint:#6A5F50;
-      --surface:#1A1714; --surface-alt:#231F1A;
-      --border:rgba(184,151,90,0.18); --border-strong:rgba(184,151,90,0.38);
-      --bg:#1A1714; --card:#211D19;
-    }
-  }
-  :root[data-theme="light"]{
+
+  /* ── Dark theme (applied via data-theme="dark" on <html>) ── */
+  [data-theme="dark"]{
     --ink:#F0EDE6; --ink-muted:#A89880; --ink-faint:#6A5F50;
     --surface:#1A1714; --surface-alt:#231F1A;
     --border:rgba(184,151,90,0.18); --border-strong:rgba(184,151,90,0.38);
     --bg:#1A1714; --card:#211D19;
+    --in-bg:rgba(46,107,79,0.18); --in-border:#3FA679; --in-text:#7FD9AE;
+    --out-bg:rgba(139,46,46,0.18); --out-border:#C24545; --out-text:#E58787;
   }
+
+  html{background:var(--bg);}
   body{
     font-family:'DM Sans',-apple-system,Segoe UI,Roboto,sans-serif;
     background:var(--bg); color:var(--ink); min-height:100vh;
     padding:20px; padding-bottom:110px;
+    transition:background 0.2s ease, color 0.2s ease;
   }
   body::before{
     content:''; position:fixed; inset:0;
@@ -48,13 +53,24 @@
     font-family:'DM Serif Display',serif; color:#fff; font-size:17px; flex-shrink:0;
     box-shadow:0 2px 6px rgba(140,111,62,0.3);
   }
+  .brand .brand-text{flex:1;}
   .brand h1{font-family:'DM Serif Display',serif; font-size:18px; font-weight:400; color:var(--ink);}
   .brand p{font-size:11px; color:var(--ink-faint); margin-top:1px;}
+
+  .theme-toggle{
+    width:40px; height:40px; border-radius:50%; flex-shrink:0;
+    background:var(--surface-alt); border:1.5px solid var(--border-strong);
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; cursor:pointer; user-select:none;
+    transition:background 0.15s, border-color 0.15s, transform 0.15s;
+  }
+  .theme-toggle:active{transform:scale(0.92);}
 
   .card{
     background:var(--card); border:1px solid var(--border); border-radius:20px;
     padding:22px; margin-bottom:16px; position:relative;
     box-shadow:0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.05);
+    transition:background 0.2s ease, border-color 0.2s ease;
   }
   .card::before{
     content:''; position:absolute; top:0; left:24px; right:24px; height:3px;
@@ -151,6 +167,7 @@
     background:var(--card); border-top:1px solid var(--border);
     padding:12px 18px; display:flex; justify-content:space-between; align-items:center;
     font-size:12px; color:var(--ink-muted); z-index:10;
+    transition:background 0.2s ease, border-color 0.2s ease;
   }
   .status-bar .dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px;}
   .status-bar .online{background:var(--success);}
@@ -185,6 +202,8 @@
   .sub-line span{text-decoration:underline; cursor:pointer; color:var(--gold-dark); font-weight:600;}
   .divider{border:none; border-top:1px dashed var(--border-strong); margin:18px 0;}
 </style>
+</head>
+<body>
 
 <div class="toast" id="toast"></div>
 
@@ -197,10 +216,11 @@
 <div class="page" id="mainApp">
   <div class="brand">
     <div class="monogram">BJ</div>
-    <div>
+    <div class="brand-text">
       <h1>Production Tracker</h1>
       <p>Brahammand Jewels — Casting to Collection</p>
     </div>
+    <div class="theme-toggle" id="themeToggle" title="Toggle dark / light mode">🌙</div>
   </div>
   <div class="sub-line">Logged in as: <b id="currentUser">—</b> · <span id="changeUser">change</span></div>
 
@@ -279,10 +299,38 @@
   var USER_KEY    = 'pms_device_user_v1';
   var COUNTER_KEY = 'pms_entry_counter_v1';
   var DEVICE_KEY  = 'pms_device_id_v1';
+  var THEME_KEY   = 'pms_theme_v1';
 
   var selectedDir = null;
   var selectedProcesses = new Set();
   var orderNumbers = [];
+
+  // ── Theme ──
+  var themeToggle = document.getElementById('themeToggle');
+  function applyTheme(t) {
+    if (t === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      themeToggle.textContent = '☀️';
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      themeToggle.textContent = '🌙';
+    }
+    try { localStorage.setItem(THEME_KEY, t); } catch(e){}
+  }
+  (function initTheme() {
+    var saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch(e){}
+    if (saved === 'dark' || saved === 'light') {
+      applyTheme(saved);
+    } else {
+      var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(systemDark ? 'dark' : 'light');
+    }
+  })();
+  themeToggle.addEventListener('click', function() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    applyTheme(isDark ? 'light' : 'dark');
+  });
 
   // ── Device ID ──
   var deviceId = localStorage.getItem(DEVICE_KEY);
@@ -564,3 +612,5 @@
 
 })();
 </script>
+</body>
+</html>
