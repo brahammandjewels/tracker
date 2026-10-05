@@ -465,38 +465,44 @@
     clearTimeout(statusTimer);
     statusTimer = setTimeout(fetchOrderStatuses, 400);
   }
-
+  var statusCache = {};
   function fetchOrderStatuses() {
     if (orderNumbers.length === 0) {
       document.getElementById('statusSection').style.display = 'none';
       return;
     }
-    var list = document.getElementById('statusList');
-    list.innerHTML = '<div style="font-size:13px;color:var(--ink-faint);">Loading…</div>';
     document.getElementById('statusSection').style.display = 'block';
+    renderStatusList();
 
-    var url = APPS_SCRIPT_URL + '?action=status&orders=' + orderNumbers.join(',');
-    fetch(url)
+    var toFetch = orderNumbers.filter(function(no){ return !statusCache[no]; });
+    if (toFetch.length === 0) return;
+
+    toFetch.forEach(function(no){ statusCache[no] = '⏳'; });
+    renderStatusList();
+
+    fetch(APPS_SCRIPT_URL + '?action=status&orders=' + toFetch.join(','))
       .then(function(r){ return r.json(); })
       .then(function(data){
-        list.innerHTML = orderNumbers.map(function(no) {
-          var raw = data[no] || '';
-          // "Polish - 100h 19m \n(total: 136h 20m)" → "Polish"
-          var loc = raw ? raw.split(' - ')[0].split('\n')[0].trim() : '';
-          var icon = '', color = 'var(--ink)';
-          if (!loc)                      { icon = '❓'; color = 'var(--ink-faint)'; loc = 'Not found'; }
-          else if (loc === 'Completed')  { icon = '✅'; color = 'var(--success)'; }
-          else if (loc === 'Central')    { icon = '🏭'; }
-          else                           { icon = '📍'; color = 'var(--gold-dark)'; }
-          return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">'
-            + '<span style="font-weight:600;font-family:\'DM Serif Display\',serif;">' + no + '</span>'
-            + '<span style="color:' + color + ';font-weight:500;">' + icon + ' ' + loc + '</span>'
-            + '</div>';
-        }).join('');
+        toFetch.forEach(function(no){
+          statusCache[no] = data[no] || 'Not found';
+        });
+        renderStatusList();
       })
       .catch(function(){
-        list.innerHTML = '<div style="font-size:13px;color:var(--ink-faint);">Could not load status</div>';
+        toFetch.forEach(function(no){ statusCache[no] = 'Error loading'; });
+        renderStatusList();
       });
+  }
+
+  function renderStatusList() {
+    var list = document.getElementById('statusList');
+    list.innerHTML = orderNumbers.map(function(no) {
+      var loc = statusCache[no] || '⏳';
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--border);">'
+        + '<span style="font-weight:600;font-family:\'DM Serif Display\',serif;">' + no + '</span>'
+        + ' — <span style="color:var(--gold-dark);font-size:13px;white-space:pre-line;">' + loc + '</span>'
+        + '</div>';
+    }).join('');
   }
 
     function removeOrderNumber(val) {
