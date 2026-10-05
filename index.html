@@ -482,8 +482,8 @@
 
         fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: {'Content-Type': 'text/plain;charset=utf-8'},
-      body: JSON.stringify({action: 'status', orders: toFetch})
+      body: JSON.stringify({action: 'status', orders: toFetch}),
+      redirect: 'follow'
     })
       .then(function(r){ return r.json(); })
       .then(function(data){
@@ -627,8 +627,8 @@
     syncing = true;
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(pending)
+      body: JSON.stringify(pending),
+      redirect: 'follow'
     })
     .then(function(res) {
       if (res.ok) {
