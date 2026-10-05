@@ -249,6 +249,10 @@
              placeholder="or type here…" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
     </div>
     <div class="tag-hint">Scan a QR OR type a number → <b>Enter / Space</b> to add.</div>
+    <div id="statusSection" style="display:none;margin-top:12px;border-top:1px dashed var(--border-strong);padding-top:10px;">
+      <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:8px;">Current Location</div>
+      <div id="statusList"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -453,12 +457,55 @@
     orderNumbers.push(val);
     renderTags();
     orderInput.value = '';
+    scheduleStatusFetch();
   }
-  function removeOrderNumber(val) {
+
+  var statusTimer = null;
+  function scheduleStatusFetch() {
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(fetchOrderStatuses, 400);
+  }
+
+  function fetchOrderStatuses() {
+    if (orderNumbers.length === 0) {
+      document.getElementById('statusSection').style.display = 'none';
+      return;
+    }
+    var list = document.getElementById('statusList');
+    list.innerHTML = '<div style="font-size:13px;color:var(--ink-faint);">Loading…</div>';
+    document.getElementById('statusSection').style.display = 'block';
+
+    var url = APPS_SCRIPT_URL + '?action=status&orders=' + orderNumbers.join(',');
+    fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        list.innerHTML = orderNumbers.map(function(no) {
+          var raw = data[no] || '';
+          // "Polish - 100h 19m \n(total: 136h 20m)" → "Polish"
+          var loc = raw ? raw.split(' - ')[0].split('\n')[0].trim() : '';
+          var icon = '', color = 'var(--ink)';
+          if (!loc)                      { icon = '❓'; color = 'var(--ink-faint)'; loc = 'Not found'; }
+          else if (loc === 'Completed')  { icon = '✅'; color = 'var(--success)'; }
+          else if (loc === 'Central')    { icon = '🏭'; }
+          else                           { icon = '📍'; color = 'var(--gold-dark)'; }
+          return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">'
+            + '<span style="font-weight:600;font-family:\'DM Serif Display\',serif;">' + no + '</span>'
+            + '<span style="color:' + color + ';font-weight:500;">' + icon + ' ' + loc + '</span>'
+            + '</div>';
+        }).join('');
+      })
+      .catch(function(){
+        list.innerHTML = '<div style="font-size:13px;color:var(--ink-faint);">Could not load status</div>';
+      });
+  }
+
+    function removeOrderNumber(val) {
     orderNumbers = orderNumbers.filter(function(n){ return n !== val; });
     renderTags();
     orderInput.focus();
+    scheduleStatusFetch();
   }
+
   function renderTags() {
     tagWrap.querySelectorAll('.order-tag').forEach(function(el){ el.remove(); });
     orderNumbers.forEach(function(num) {
