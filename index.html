@@ -480,16 +480,22 @@
     toFetch.forEach(function(no){ statusCache[no] = '⏳'; });
     renderStatusList();
 
-    fetch(APPS_SCRIPT_URL + '?action=status&orders=' + toFetch.join(','))
+        fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({action: 'status', orders: toFetch})
+    })
       .then(function(r){ return r.json(); })
       .then(function(data){
         toFetch.forEach(function(no){
-          statusCache[no] = data[no] || 'Not found';
+          statusCache[no] = (data.result && data.result[no]) ? data.result[no] : 'Not found';
         });
         renderStatusList();
       })
       .catch(function(){
-        toFetch.forEach(function(no){ statusCache[no] = 'Error loading'; });
+        toFetch.forEach(function(no){
+          if (statusCache[no] === '⏳') statusCache[no] = 'Could not load';
+        });
         renderStatusList();
       });
   }
