@@ -465,6 +465,7 @@
     clearTimeout(statusTimer);
     statusTimer = setTimeout(fetchOrderStatuses, 400);
   }
+
   var statusCache = {};
   function fetchOrderStatuses() {
     if (orderNumbers.length === 0) {
@@ -480,24 +481,36 @@
     toFetch.forEach(function(no){ statusCache[no] = '⏳'; });
     renderStatusList();
 
-        fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({action: 'status', orders: toFetch}),
-      redirect: 'follow'
-    })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        toFetch.forEach(function(no){
-          statusCache[no] = (data.result && data.result[no]) ? data.result[no] : 'Not found';
-        });
-        renderStatusList();
-      })
-      .catch(function(){
-        toFetch.forEach(function(no){
-          if (statusCache[no] === '⏳') statusCache[no] = 'Could not load';
-        });
-        renderStatusList();
+    var cbName = '_sc_' + Date.now();
+    var script = document.createElement('script');
+    var timer = setTimeout(function() {
+      toFetch.forEach(function(no){
+        if (statusCache[no] === '⏳') statusCache[no] = 'Could not load';
       });
+      renderStatusList();
+      cleanup();
+    }, 12000);
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = function(data) {
+      toFetch.forEach(function(no){
+        statusCache[no] = (data && data[no]) ? data[no] : 'Not found';
+      });
+      renderStatusList();
+      cleanup();
+    };
+    script.onerror = function() {
+      toFetch.forEach(function(no){
+        if (statusCache[no] === '⏳') statusCache[no] = 'Error';
+      });
+      renderStatusList();
+      cleanup();
+    };
+    script.src = APPS_SCRIPT_URL + '?action=status&orders=' + encodeURIComponent(toFetch.join(',')) + '&callback=' + cbName;
+    document.head.appendChild(script);
   }
 
   function renderStatusList() {
@@ -511,12 +524,14 @@
     }).join('');
   }
 
-    function removeOrderNumber(val) {
+  function removeOrderNumber(val) {
     orderNumbers = orderNumbers.filter(function(n){ return n !== val; });
     renderTags();
     orderInput.focus();
     scheduleStatusFetch();
   }
+
+
 
   function renderTags() {
     tagWrap.querySelectorAll('.order-tag').forEach(function(el){ el.remove(); });
